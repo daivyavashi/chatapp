@@ -3,16 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node server.js",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production node server.js",
     "lint": "eslint"
   },
   "dependencies": {
+    "@vercel/blob": "^0.23.4",
+    "@vercel/postgres": "^0.8.0",
+    "bcryptjs": "^3.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.0",
     "next": "16.2.1",
+    "pusher": "^5.2.0",
+    "pusher-js": "^8.4.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "socket.io-client": "^4.8.3"
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

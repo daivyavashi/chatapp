@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { io, Socket } from "socket.io-client";
+import Pusher from "pusher-js";
 import styles from "./chat.module.css";
 
 interface Message {
@@ -42,9 +42,9 @@ const COLORS = ["#06b6d4", "#8b5cf6", "#f43f5e", "#10b981", "#f59e0b", "#ec4899"
 // Generate random DiceBear avatar helper
 const generateAvatar = (seed: string) => `https://api.dicebear.com/9.x/fun-emoji/svg?seed=${seed}`;
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
-let socket: Socket;
+let pusher: Pusher;
 
 export default function ChatPage() {
   const [joined, setJoined] = useState(false);
@@ -132,65 +132,78 @@ export default function ChatPage() {
     roomRef.current = currentRoomId;
   }, [currentRoomId]);
 
-  const connectSocket = useCallback(() => {
-    if (!socket) {
-      socket = io(API_URL, { transports: ["websocket"] });
-    } else if (socket.disconnected) {
-      socket.connect();
+  const connectPusher = useCallback(() => {
+    if (!pusher) {
+      pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
+        cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+        authEndpoint: "/api/pusher/auth",
+        auth: {
+          params: { username }
+        }
+      });
     }
 
-    // Bind event listeners only once
-    socket.on("room_users", (users: RoomUser[]) => {
-      setRoomUsers(users);
-    });
-
-    socket.on("typing_indicator", ({ username: typingUser, isTyping }: { username: string; isTyping: boolean }) => {
-      setTypingUsers((prev) =>
-        isTyping ? [...new Set([...prev, typingUser])] : prev.filter((u) => u !== typingUser)
-      );
-    });
+    // pusher binds here if needed globally
   }, []);
 
   useEffect(() => {
-    if (!joined) return;
+    if (joined && currentRoomId) {
+      connectPusher();
+      const channelName = `presence-room-${currentRoomId}`;
+      const channel = pusher.subscribe(channelName);
 
-    const handleReceiveMessage = (msg: Message) => {
-      const room = msg.room;
-      setMessages((prev) => ({
-        ...prev,
-        [room]: [...(prev[room] || []), msg],
-      }));
-    };
-
-    const handleMessageDeleted = ({ id }: { id: number }) => {
-      setMessages((prev) => {
-        const updated: Record<string, Message[]> = {};
-        for (const room in prev) {
-          updated[room] = prev[room].filter((m) => m.id !== id);
-        }
-        return updated;
+      channel.bind("pusher:subscription_succeeded", () => {
+        const members: RoomUser[] = [];
+        channel.members.each((member: any) => {
+          members.push({ username: member.info.username, color: '#06b6d4', avatarUrl: generateAvatar(member.info.username) });
+        });
+        setRoomUsers(members);
       });
-    };
 
-    socket.on("receive_message", handleReceiveMessage);
-    socket.on("message_deleted", handleMessageDeleted);
+      channel.bind("pusher:member_added", (member: any) => {
+        setRoomUsers(prev => [...prev, { username: member.info.username, color: '#06b6d4', avatarUrl: generateAvatar(member.info.username) }]);
+      });
 
-    return () => {
-      socket.off("receive_message", handleReceiveMessage);
-      socket.off("message_deleted", handleMessageDeleted);
-    };
-  }, [joined]);
+      channel.bind("pusher:member_removed", (member: any) => {
+        setRoomUsers(prev => prev.filter(u => u.username !== member.info.username));
+      });
 
-  // Bind core socket once
-  useEffect(() => {
-    if (joined) {
-      connectSocket();
+      channel.bind("receive_message", (msg: Message) => {
+        setMessages((prev) => ({
+          ...prev,
+          [msg.room]: [...(prev[msg.room] || []), msg],
+        }));
+      });
+
+      channel.bind("message_deleted", ({ id }: { id: number }) => {
+        setMessages((prev) => {
+          const updated: Record<string, Message[]> = {};
+          for (const room in prev) {
+            updated[room] = prev[room].filter((m) => m.id !== id);
+          }
+          return updated;
+        });
+      });
+
+      channel.bind("client-typing", ({ username: typingUser, isTyping }: { username: string; isTyping: boolean }) => {
+        setTypingUsers((prev) =>
+          isTyping ? [...new Set([...prev, typingUser])] : prev.filter((u) => u !== typingUser)
+        );
+      });
+
       return () => {
-        socket.off("room_users");
-        socket.off("typing_indicator");
+        channel.unbind_all();
+        pusher.unsubscribe(channelName);
       };
     }
-  }, [joined, connectSocket]);
+  }, [joined, currentRoomId, username, connectPusher]);
+
+  // Re-bind core pusher if joined
+  useEffect(() => {
+    if (joined) {
+      connectPusher();
+    }
+  }, [joined, connectPusher]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -451,13 +464,34 @@ export default function ChatPage() {
     } catch (err) { console.error(err); }
   };
 
-  const sendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!message.trim()) return;
-    socket.emit("send_message", { room: currentRoomId, message, replyToId: replyingTo?.id || null, username });
-    socket.emit("typing", { room: currentRoomId, username, isTyping: false });
-    setMessage("");
-    setReplyingTo(null);
+  const sendMessage = async (e: React.FormEvent, msgTextOverride?: string) => {
+    if (e) e.preventDefault();
+    const textToSend = msgTextOverride || message;
+    if (!textToSend.trim() || !currentRoomId || !joined) return;
+
+    try {
+      if (currentRoomId && joined) {
+        const channel = pusher.channel(`presence-room-${currentRoomId}`);
+        if (channel) channel.trigger("client-typing", { username, isTyping: false });
+      }
+
+      await fetch(`${API_URL}/api/messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room: currentRoomId,
+          message: textToSend,
+          username,
+          avatarUrl,
+          color: avatarColor,
+          replyToId: replyingTo?.id || null,
+        })
+      });
+      if (!msgTextOverride) setMessage("");
+      setReplyingTo(null);
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
   };
 
   const handleAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -468,7 +502,8 @@ export default function ChatPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`${API_URL}/api/upload-attachment`, {
+      formData.append('username', username);
+      const res = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -477,7 +512,7 @@ export default function ChatPage() {
         const msgText = data.isImage
           ? `[img]${data.url}[/img]`
           : `[file]${data.url}|${data.name}[/file]`;
-        socket.emit('send_message', { room: currentRoomId, message: msgText, replyToId: null, username });
+        await sendMessage(null as any, msgText);
       }
     } catch (err) { console.error(err); }
     setIsUploading(false);
@@ -485,10 +520,18 @@ export default function ChatPage() {
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessage(e.target.value);
-    socket.emit("typing", { room: currentRoomId, username, isTyping: true });
+    
+    if (currentRoomId && joined) {
+      const channel = pusher.channel(`presence-room-${currentRoomId}`);
+      if (channel) channel.trigger("client-typing", { username, isTyping: true });
+    }
+
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing", { room: currentRoomId, username, isTyping: false });
+      if (currentRoomId && joined) {
+        const channel = pusher.channel(`presence-room-${currentRoomId}`);
+        if (channel) channel.trigger("client-typing", { username, isTyping: false });
+      }
     }, 1500);
   };
 
@@ -510,7 +553,7 @@ export default function ChatPage() {
       formData.append("username", username);
       
       try {
-        const res = await fetch(`${API_URL}/api/upload-avatar`, {
+        const res = await fetch(`${API_URL}/api/upload`, {
           method: "POST",
           body: formData,
         });
