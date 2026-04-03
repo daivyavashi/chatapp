@@ -5,9 +5,9 @@ import { NextResponse } from "next/server";
  * One-time setup route to initialize the Vercel Postgres schema.
  */
 export async function GET() {
-  const client = await db.connect();
-
+  let client;
   try {
+    client = await db.connect();
     // 1. Users Table
     await client.sql`
       CREATE TABLE IF NOT EXISTS users (
@@ -74,6 +74,6 @@ export async function GET() {
     console.error("Setup Error:", error);
     return NextResponse.json({ error: "Failed to initialize tables." }, { status: 500 });
   } finally {
-    client.release();
+    client?.release();
   }
 }
