@@ -1,0 +1,60 @@
+﻿
+> frontend@0.1.0 build
+> next build
+
+Γû▓ Next.js 16.2.1 (Turbopack)
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 42s
+  Running TypeScript ...
+  Finished TypeScript in 25.6s ...
+  Collecting page data using 3 workers ...
+node.exe : (node:12796) [DEP0040] 
+DeprecationWarning: The `punycode` 
+module is deprecated. Please use a 
+userland alternative instead.
+At C:\Program Files\nodejs\npm.ps1:29 
+char:3
++   & $NODE_EXE $NPM_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecif 
+   ied: ((node:12796) [D...native inst  
+  ead.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCom 
+   mandError
+ 
+(Use `node --trace-deprecation ...` to 
+show where the warning was created)
+(node:9152) [DEP0040] 
+DeprecationWarning: The `punycode` 
+module is deprecated. Please use a 
+userland alternative instead.
+(Use `node --trace-deprecation ...` to 
+show where the warning was created)
+  Generating static pages using 3 workers (0/14) ...
+  Generating static pages using 3 workers (3/14) 
+  Generating static pages using 3 workers (6/14) 
+  Generating static pages using 3 workers (10/14) 
+Error occurred prerendering page 
+"/chat". Read more: https://nextjs.org/d
+ocs/messages/prerender-error
+TypeError: a.i(...).default is not a 
+constructor
+    at module evaluation (F:\chat app\fr
+ontend\.next\server\chunks\ssr\[root-of-
+the-server]__0ssqqx5._.js:1:147659)
+    at instantiateModule (F:\chat app\fr
+ontend\.next\server\chunks\ssr\[turbopac
+k]_runtime.js:853:9)
+    at getOrInstantiateModuleFromParent 
+(F:\chat app\frontend\.next\server\chunk
+s\ssr\[turbopack]_runtime.js:877:12)
+    at Context.commonJsRequire [as r] 
+(F:\chat app\frontend\.next\server\chunk
+s\ssr\[turbopack]_runtime.js:302:12) {
+  digest: '2029183042'
+}
+Export encountered an error on 
+/chat/page: /chat, exiting the build.
+Γ¿» Next.js build worker exited with 
+code: 1 and signal: null
