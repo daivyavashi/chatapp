@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Kirkcord — Realtime Chat App",
-  description: "A realtime chat application demo powered by Socket.io and Next.js.",
+  description: "A realtime chat application demo powered by Pusher and Next.js.",
 };
 
 export default function RootLayout({

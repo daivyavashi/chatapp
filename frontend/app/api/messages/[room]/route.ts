@@ -1,9 +1,9 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 
-export async function GET(req: Request, { params }: { params: { room: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ room: string }> }) {
   try {
-    const { room } = params;
+    const { room } = await params;
 
     const { rows } = await sql`
       SELECT m.id, m.room, m.username, m.text, m.timestamp, m.isSystem, m.reply_to_id,

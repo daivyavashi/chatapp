@@ -1,9 +1,9 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 
-export async function GET(req: Request, { params }: { params: { username: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ username: string }> }) {
   try {
-    const { username } = params;
+    const { username } = await params;
 
     const { rows } = await sql`
       SELECT u.username, u.color, u.avatarUrl

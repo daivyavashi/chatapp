@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import Pusher from "pusher-js";
+import { pusherClient } from "@/lib/pusher-client";
 import styles from "./chat.module.css";
 
 interface Message {
@@ -44,7 +44,7 @@ const generateAvatar = (seed: string) => `https://api.dicebear.com/9.x/fun-emoji
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
-let pusher: Pusher;
+
 
 export default function ChatPage() {
   const [joined, setJoined] = useState(false);
@@ -133,28 +133,18 @@ export default function ChatPage() {
   }, [currentRoomId]);
 
   const connectPusher = useCallback(() => {
-    if (!pusher) {
-      pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
-        cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
-        authEndpoint: "/api/pusher/auth",
-        auth: {
-          params: { username }
-        }
-      });
-    }
-
-    // pusher binds here if needed globally
+    // pusherClient is already initialized in lib/pusher-client
   }, []);
 
   useEffect(() => {
     if (joined && currentRoomId) {
       connectPusher();
       const channelName = `presence-room-${currentRoomId}`;
-      const channel = pusher.subscribe(channelName);
+      const channel = pusherClient.subscribe(channelName);
 
       channel.bind("pusher:subscription_succeeded", () => {
         const members: RoomUser[] = [];
-        channel.members.each((member: any) => {
+        (channel as any).members.each((member: any) => {
           members.push({ username: member.info.username, color: '#06b6d4', avatarUrl: generateAvatar(member.info.username) });
         });
         setRoomUsers(members);
@@ -193,7 +183,7 @@ export default function ChatPage() {
 
       return () => {
         channel.unbind_all();
-        pusher.unsubscribe(channelName);
+        pusherClient.unsubscribe(channelName);
       };
     }
   }, [joined, currentRoomId, username, connectPusher]);
@@ -248,28 +238,19 @@ export default function ChatPage() {
           
           const initialRoomId = `${srvData[0].id}-${srvData[0].channels[0].id}`;
           
-          const memberRes = await fetch(`http://localhost:4000/api/servers/${srvData[0].id}/members`);
+          const memberRes = await fetch(`${API_URL}/api/servers/${srvData[0].id}`);
           if (memberRes.ok) {
             const members = await memberRes.json();
             setServerMembers(members);
           }
           
-          connectSocket();
-          socket.emit("join_room", { 
-            room: initialRoomId, 
-            username: data.username, 
-            color: data.color, 
-            avatarUrl: data.avatarUrl 
-          });
-          
-          const msgRes = await fetch(`http://localhost:4000/api/messages/${initialRoomId}`);
+          const msgRes = await fetch(`${API_URL}/api/messages/${initialRoomId}`);
           if (msgRes.ok) {
             const msgs = await msgRes.json();
             setMessages(prev => ({ ...prev, [initialRoomId]: msgs }));
           }
         } else {
           setActiveView('home');
-          connectSocket();
         }
         setJoined(true);
       } else {
@@ -281,9 +262,6 @@ export default function ChatPage() {
   };
 
   const handleLogout = () => {
-    if (socket) {
-      socket.disconnect();
-    }
     setJoined(false);
     setUsername("");
     setPassword("");
@@ -308,7 +286,6 @@ export default function ChatPage() {
     setActiveFriend(friend);
     
     const dmRoomId = `dm-${[username, friend.username].sort().join('-')}`;
-    socket.emit("join_room", { room: dmRoomId, username, color: avatarColor, avatarUrl });
     
     if (!messages[dmRoomId]) {
       try {
@@ -319,7 +296,6 @@ export default function ChatPage() {
         }
       } catch (err) {}
     }
-    socket.emit("join_room", { room: dmRoomId, username, color: avatarColor, avatarUrl });
     setTypingUsers([]);
   };
 
@@ -329,7 +305,7 @@ export default function ChatPage() {
     if (!addFriendUsername.trim()) return;
 
     try {
-      const res = await fetch("http://localhost:4000/api/friends", {
+      const res = await fetch(`${API_URL}/api/friends`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, friendUsername: addFriendUsername.trim() })
@@ -367,7 +343,7 @@ export default function ChatPage() {
     
     if (!activeServer || activeServer.id !== srv.id) {
       try {
-        const memRes = await fetch(`${API_URL}/api/servers/${srv.id}/members`);
+        const memRes = await fetch(`${API_URL}/api/servers/${srv.id}`);
         if (memRes.ok) {
           const members = await memRes.json();
           setServerMembers(members);
@@ -387,7 +363,6 @@ export default function ChatPage() {
 
     setActiveServer(srv);
     setActiveChannel(ch);
-    socket.emit("join_room", { room: newRoomId, username, color: avatarColor, avatarUrl });
     setTypingUsers([]);
   };
 
@@ -471,7 +446,7 @@ export default function ChatPage() {
 
     try {
       if (currentRoomId && joined) {
-        const channel = pusher.channel(`presence-room-${currentRoomId}`);
+        const channel = pusherClient.channel(`presence-room-${currentRoomId}`);
         if (channel) channel.trigger("client-typing", { username, isTyping: false });
       }
 
@@ -522,14 +497,14 @@ export default function ChatPage() {
     setMessage(e.target.value);
     
     if (currentRoomId && joined) {
-      const channel = pusher.channel(`presence-room-${currentRoomId}`);
+      const channel = pusherClient.channel(`presence-room-${currentRoomId}`);
       if (channel) channel.trigger("client-typing", { username, isTyping: true });
     }
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       if (currentRoomId && joined) {
-        const channel = pusher.channel(`presence-room-${currentRoomId}`);
+        const channel = pusherClient.channel(`presence-room-${currentRoomId}`);
         if (channel) channel.trigger("client-typing", { username, isTyping: false });
       }
     }, 1500);
@@ -581,8 +556,6 @@ export default function ChatPage() {
     setAvatarColor(settingsColor);
     setAvatarUrl(finalAvatarUrl);
     
-    // Broadcast via socket to update immediately for current clients
-    socket.emit("update_profile", { username, color: settingsColor, avatarUrl: finalAvatarUrl });
     setShowSettings(false);
   };
 
@@ -879,7 +852,15 @@ export default function ChatPage() {
                       </button>
                       {msg.username === username && (
                         <button
-                          onClick={() => socket.emit('delete_message', { messageId: msg.id, room: currentRoomId })}
+                          onClick={async () => {
+                            try {
+                              await fetch(`${API_URL}/api/messages/send`, {
+                                method: 'DELETE',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ messageId: msg.id, room: currentRoomId, username })
+                              });
+                            } catch (err) {}
+                          }}
                           title="Delete"
                           style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}
                           onMouseEnter={e => (e.currentTarget.style.color = '#f43f5e')}

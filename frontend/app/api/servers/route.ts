@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     // Fetch channels for these servers
     const serverIds = servers.map(s => s.id);
     const { rows: channels } = await sql`
-      SELECT * FROM channels WHERE server_id = ANY(${serverIds})
+      SELECT * FROM channels WHERE server_id = ANY(${serverIds as any})
     `;
 
     const formattedServers = servers.map(srv => ({

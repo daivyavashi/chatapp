@@ -5,9 +5,9 @@ import { put } from "@vercel/blob";
 /**
  * Server Settings API (Unified for updates).
  */
-export async function POST(req: Request, { params }: { params: { serverId: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ serverId: string }> }) {
   try {
-    const { serverId } = params;
+    const { serverId } = await params;
     const formData = await req.formData();
     const name = formData.get("name") as string;
     const iconFile = formData.get("icon") as File | null;
@@ -44,9 +44,9 @@ export async function POST(req: Request, { params }: { params: { serverId: strin
   }
 }
 
-export async function GET(req: Request, { params }: { params: { serverId: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ serverId: string }> }) {
   try {
-    const { serverId } = params;
+    const { serverId } = await params;
     const { rows } = await sql`
       SELECT sm.username, u.color, u.avatarUrl
       FROM server_members sm
