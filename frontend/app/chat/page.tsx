@@ -219,6 +219,13 @@ export default function ChatPage() {
 
       setAvatarColor(data.color);
       setAvatarUrl(data.avatarUrl);
+
+      // ✅ Tell Pusher who this user is BEFORE any channel subscriptions
+      if (pusherClient.config) {
+        pusherClient.config.auth = {
+          params: { username: data.username },
+        };
+      }
       
       try {
         const friendRes = await fetch(`${API_URL}/api/friends/${data.username}`);
