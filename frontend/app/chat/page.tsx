@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { pusherClient } from "@/lib/pusher-client";
+import { createPusherClient } from "@/lib/pusher-client";
 import styles from "./chat.module.css";
 
 interface Message {
@@ -111,6 +111,7 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pusherRef = useRef<any>(null);
 
   let currentRoomId = activeServer && activeChannel ? `${activeServer.id}-${activeChannel.id}` : "";
   if (activeView === 'home' && activeFriend) {
@@ -137,10 +138,10 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    if (joined && currentRoomId) {
+    if (joined && currentRoomId && pusherRef.current) {
       connectPusher();
       const channelName = `presence-room-${currentRoomId}`;
-      const channel = pusherClient.subscribe(channelName);
+      const channel = pusherRef.current.subscribe(channelName);
 
       channel.bind("pusher:subscription_succeeded", () => {
         const members: RoomUser[] = [];
@@ -183,7 +184,7 @@ export default function ChatPage() {
 
       return () => {
         channel.unbind_all();
-        pusherClient.unsubscribe(channelName);
+        pusherRef.current?.unsubscribe(channelName);
       };
     }
   }, [joined, currentRoomId, username, connectPusher]);
@@ -220,12 +221,8 @@ export default function ChatPage() {
       setAvatarColor(data.color);
       setAvatarUrl(data.avatarUrl);
 
-      // ✅ Tell Pusher who this user is BEFORE any channel subscriptions
-      if (pusherClient.config) {
-        pusherClient.config.auth = {
-          params: { username: data.username },
-        };
-      }
+      // ✅ Create a fresh Pusher client with the real username in the auth URL
+      pusherRef.current = createPusherClient(data.username);
       
       try {
         const friendRes = await fetch(`${API_URL}/api/friends/${data.username}`);
@@ -453,7 +450,7 @@ export default function ChatPage() {
 
     try {
       if (currentRoomId && joined) {
-        const channel = pusherClient.channel(`presence-room-${currentRoomId}`);
+        const channel = pusherRef.current?.channel(`presence-room-${currentRoomId}`);
         if (channel) channel.trigger("client-typing", { username, isTyping: false });
       }
 
@@ -504,14 +501,14 @@ export default function ChatPage() {
     setMessage(e.target.value);
     
     if (currentRoomId && joined) {
-      const channel = pusherClient.channel(`presence-room-${currentRoomId}`);
+      const channel = pusherRef.current?.channel(`presence-room-${currentRoomId}`);
       if (channel) channel.trigger("client-typing", { username, isTyping: true });
     }
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       if (currentRoomId && joined) {
-        const channel = pusherClient.channel(`presence-room-${currentRoomId}`);
+        const channel = pusherRef.current?.channel(`presence-room-${currentRoomId}`);
         if (channel) channel.trigger("client-typing", { username, isTyping: false });
       }
     }, 1500);

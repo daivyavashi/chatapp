@@ -7,14 +7,13 @@ import { pusherServer } from "@/lib/pusher-server";
  */
 export async function POST(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const username = searchParams.get("username") || "Anonymous";
+
     const data = await req.text();
     const params = new URLSearchParams(data);
     const socketId = params.get("socket_id");
     const channelName = params.get("channel_name");
-    
-    // In a real app, you would verify the user session here.
-    // For this demo, we'll extract the username if provided in the query or body.
-    const username = params.get("username") || "Anonymous";
 
     if (!socketId || !channelName) {
       return new Response("Unauthorized", { status: 401 });

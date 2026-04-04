@@ -1,17 +1,15 @@
 import PusherClient from "pusher-js";
 
 /**
- * Client-side Pusher configuration.
+ * Creates a client-side Pusher instance tied to a specific logged-in user.
+ * Called after login so the username is baked into the auth endpoint URL.
  */
-export const pusherClient = typeof window !== "undefined"
-  ? new PusherClient(
-      process.env.NEXT_PUBLIC_PUSHER_KEY || "app-key",
-      {
-        cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "mt1",
-        authEndpoint: "/api/pusher/auth",
-        auth: {
-          params: { username: "" }, // populated dynamically after login
-        },
-      }
-    )
-  : ({} as any);
+export function createPusherClient(username: string): PusherClient {
+  return new PusherClient(
+    process.env.NEXT_PUBLIC_PUSHER_KEY || "app-key",
+    {
+      cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "mt1",
+      authEndpoint: `/api/pusher/auth?username=${encodeURIComponent(username)}`,
+    }
+  );
+}
